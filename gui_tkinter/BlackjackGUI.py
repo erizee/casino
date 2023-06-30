@@ -1,8 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
-import socket
-from helpers import SendDataType, receive_data
-from _thread import *
+from helpers import SendDataType
 
 
 class BlackjackGamePage(tk.Frame):
@@ -22,9 +19,6 @@ class BlackjackGamePage(tk.Frame):
 
         self.bet_button = tk.Button(self, text="Place Bet", command=self.place_bet)
         self.bet_button.pack()
-
-        # self.play_button = tk.Button(self, text="Play", command=self.play)
-        # self.play_button.pack()
 
         self.back_button = tk.Button(self, text="Go back", command=self.back)
         self.back_button.pack()
@@ -87,9 +81,6 @@ class BlackjackGamePage(tk.Frame):
         self.player_hand.delete('1.0', tk.END)
         self.cmd_text.delete('1.0', tk.END)
 
-    # def play(self):
-    #     self.s.send(bytes("play blackjack", "utf-8"))
-
     def handle_message(self, data):
         if data is not None:
             if data[0] == SendDataType.STRING:
@@ -102,5 +93,3 @@ class BlackjackGamePage(tk.Frame):
                     self.update_result(msg)
                 else:
                     self.update_cmd(msg)
-
-

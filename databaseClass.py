@@ -133,26 +133,5 @@ class Database:
             return None
 
 
-if  __name__ == "__main__":
-    a = Database()
-    print(a.get_player_stats("sus"))
-    # a.create_client("rob")
-    # a.create_client("bob")
-    # game_history = [
-    #     ("bob", "poker", 0, 0, 100),
-    #     ("rob", "blackjack", 1, 1000, 0),
-    #     ("bob", "bingo", 1, 200, 0),
-    #     ("rob", "roulette", 0, 0, 300),
-    #     ("bob", "dice", 1, 300, 0),
-    #     ("rob", "roulette", 0, 0, 200),
-    #     ("bob", "bingo", 1, 100, 0),
-    #     ("rob", "blackjack", 1, 500, 0),
-    #     ("bob", "dice", 0, 0, 75),
-    #     ("rob", "baccarat", 1, 1000, 0)
-    # ]
-    #
-    # for record in game_history:
-    #     a.insert_game_history(*record)
-
 
 

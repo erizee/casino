@@ -4,21 +4,22 @@ from abc import ABC, abstractmethod
 
 FIGURES = ["J", "Q", "K"]
 
+
 class Deck:
-    def __init__(self, CardClass, num_of_decks):
+    def __init__(self, card_class, num_of_decks):
         self.cards = []
         self.num_of_decks = num_of_decks
-        self.CardClass = CardClass
+        self.card_class = card_class
 
-        self.fillDeck()
+        self.fill_deck()
         random.seed(time.time())
 
-    def fillDeck(self):
+    def fill_deck(self):
         self.cards = []
         for deck in range(self.num_of_decks):
             for suit in ["♠", "♥", "♦", "♣"]:
                 for value in range(1, 14):
-                    self.cards.append(self.CardClass(suit, value))
+                    self.cards.append(self.card_class(suit, value))
         self.shuffle()
 
     def shuffle(self):
@@ -26,9 +27,18 @@ class Deck:
 
     def draw(self):
         if len(self.cards) <= 7:
-            self.fillDeck()
+            self.fill_deck()
 
         return self.cards.pop()
+
+
+def value_to_figure(value):
+    if value == 1:
+        return "A"
+    elif value <= 10:
+        return str(value)
+    else:
+        return FIGURES[value - 11]
 
 
 class Card(ABC):
@@ -37,48 +47,34 @@ class Card(ABC):
         self._value = val
 
     def __str__(self):
-        return f"{self.valueToFigure(self._value)}{self._suit}"
+        return f"{value_to_figure(self._value)}{self._suit}"
 
     def __repr__(self):
-        return f"{self.valueToFigure(self._value)}{self._suit}"
+        return f"{value_to_figure(self._value)}{self._suit}"
 
     @property
     @abstractmethod
     def value(self):
-        return self._value if self._value <= 10 else 0
-
-    @abstractmethod
-    def valueToFigure(self,value):
         pass
 
 
 class CardBaccarat(Card, ABC):
-    def valueToFigure(self, value):
-        if value == 1:
-            return "A"
-        elif value <= 10:
-            return str(value)
-        else:
-            return FIGURES[value - 11]
-
     @property
     def value(self):
         return self._value if self._value <= 10 else 0
 
 
 class CardBlackjack(Card, ABC):
-
     @property
     def value(self):
         return self._value if self._value <= 10 else 10
 
-    def valueToFigure(self, value):
-        if value == 1:
-            return "A"
-        elif value <= 10:
-            return str(value)
-        else:
-            return FIGURES[value - 11]
 
+class CardPoker(Card, ABC):
+    @property
+    def value(self):
+        return self._value
 
-
+    @property
+    def suit(self):
+        return self._suit

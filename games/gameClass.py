@@ -33,6 +33,11 @@ class Game:
     def handle_timer(self):
         pass
 
+    def send_str(self, message, client_key):
+        self.message_queues[client_key].put(
+            (bytes(message, "utf-8"), SendDataType.STRING))
+        self.output.append(client_key)
+
     def add_player(self, player):
         self.players[player.conn] = player
 

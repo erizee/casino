@@ -39,6 +39,7 @@ class ShooterDpassBet(Exception):
     def __repr__(self):
         return self.message
 
+
 # Poker errors
 class NotEnoughRaiseError(Exception):
     def __init__(self):

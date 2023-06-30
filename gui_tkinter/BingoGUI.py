@@ -1,78 +1,170 @@
 import tkinter as tk
-import socket
-from helpers import SendDataType, receive_data
-from _thread import *
+import ttkbootstrap as ttk
+from helpers import SendDataType
+
 
 class BingoGamePage(tk.Frame):
-    def __init__(self, parent, controller, width, height, **kw):
+    def __init__(self, parent, controller, width, height):
         tk.Frame.__init__(self, parent, width=width, height=height)
-        self.running = 1
-
-        self.parent = parent
         self.controller = controller
         self.s = self.controller.s
 
-        # self.back_btn = tk.Button(self, text="Back", command=self.back)
+        # GUI variables
+        self.bingo_numbers = []
+        self.messages_output = None
+        self.current_number_label = None
+        self.bet_entry = None
+        self.bingo_button = None
 
-        self.label = tk.Label(self, text="Welcome to the Bingo game!")
-        self.label = tk.Label(self, text="Welcome to the Bingo game!")
-        self.label.pack()
+        # Split screen into two halves
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
 
-        self.bet_entry = tk.Entry(self)
-        self.bet_entry.pack()
+        # Left half
+        left_frame = tk.Frame(self)
+        left_frame.grid(row=0, column=0, sticky="nsew")
 
-        # self.play_button = tk.Button(self, text="Play", command=self.play)
-        # self.play_button.pack()
+        self.create_betting_option(left_frame)
+        self.create_messages_output(left_frame)
+        self.create_current_number_label(left_frame)
+        self.create_back_button(left_frame)
 
-        self.bet_button = tk.Button(self, text="Place Bet", command=self.place_bet)
-        self.bet_button.pack()
+        # Right half
+        right_frame = tk.Frame(self)
+        right_frame.grid(row=0, column=1, sticky="nsew")
 
-        self.mark_button = tk.Button(self, text="Mark Number", command=self.mark_number)
-        self.mark_button.pack()
+        self.create_bingo_grid(right_frame)
 
-        self.back_button = tk.Button(self, text="Go back", command=self.back)
-        self.back_button.pack()
+    def create_bingo_grid(self, parent):
+        self.bingo_numbers = []
 
-        self.board_text = tk.Text(self, width=30, height=10)
-        self.board_text.pack()
+        for i in range(5):
+            number_row = []
+            frame = tk.Frame(parent)
+            frame.pack(side="top", pady=5)
+            for j in range(5):
+                number = tk.StringVar()
+                button = tk.Button(
+                    frame,
+                    textvariable=number,
+                    font=("Candara", 14),
+                    background="#375A7F",
+                    foreground="#FFFFFF",
+                    borderwidth=1,
+                    relief="solid",
+                    width=6,
+                    height=3,
+                    anchor="center",
+                    command=lambda row=i, col=j: self.button_click(row, col)
+                )
+                number_row.append(number)
+                button.pack(side="left", padx=5)
+            self.bingo_numbers.append(number_row)
 
-        self.number_label = tk.Label(self, text="Current Number:")
-        self.number_label.pack()
-
-        self.number_text = tk.Text(self, width=10, height=1)
-        self.number_text.pack()
-
-        self.bingo_button = tk.Button(self, text="Bingo!", command=self.send_bingo)
+        bingo_frame = tk.Frame(parent)
+        bingo_frame.pack(side="top", pady=10)
+        self.bingo_button = tk.Button(
+            bingo_frame,
+            text="Bingo!",
+            font=("Candara", 14),
+            background="#375A7F",
+            foreground="#FFFFFF",
+            borderwidth=1,
+            relief="solid",
+            width=10,
+            height=3,
+            command=self.bingo_button_click
+        )
         self.bingo_button.pack()
 
-        self.cmd_text = tk.Text(self, width=30, height=10)
-        self.cmd_text.pack()
+    def bingo_button_click(self):
+        self.s.send(bytes("bingo", "utf-8"))
+
+    def update_bingo_numbers(self, numbers):
+        for i in range(5):
+            for j in range(5):
+                self.bingo_numbers[i][j].set(numbers[i][j])
+
+    def create_current_number_label(self, parent):
+        self.current_number_label = tk.Label(
+            parent,
+            font=("Candara", 14),
+            bg="#375A7F",
+            fg="#FFFFFF",
+            justify="center",
+            width=15,
+            height=3
+        )
+        self.current_number_label.pack(pady=10)
+
+    def update_current_number(self, number):
+        self.current_number_label.config(text=number)
+
+    def create_betting_option(self, parent):
+        self.bet_entry = tk.StringVar()
+        bet_label = tk.Label(
+            parent,
+            text="Enter bet amount",
+            font=("Candara", 13),
+            fg="#FFFFFF",
+            justify="center"
+        )
+        bet_label.pack(pady=10)
+
+        bet_entry = ttk.Entry(
+            parent,
+            font=("Candara", 13),
+            textvariable=self.bet_entry
+        )
+        bet_entry.pack(pady=10)
+
+        place_bet_btn = tk.Button(
+            parent,
+            text="Place Bet",
+            command=self.place_bet,
+            bg="#375A7F",
+            font=("Candara", 13),
+            fg="#FFFFFF",
+            justify="center",
+            width=10
+        )
+        place_bet_btn.pack(pady=10)
+
+    def create_messages_output(self, parent):
+        self.messages_output = tk.Listbox(
+            parent,
+            font=("Candara", 13),
+            bg="#375A7F",
+            fg="#FFFFFF",
+            relief="solid",
+            width=40,
+            height=10
+        )
+        self.messages_output.pack(padx=10, pady=10)
+
+    def show_message(self, message):
+        self.messages_output.insert(tk.END, message)
+        self.messages_output.yview(tk.END)
+
+    def button_click(self, row, col):
+        self.s.send(bytes(f"{row}, {col}", 'utf-8'))
 
     def place_bet(self):
         bet_amount = self.bet_entry.get()
-        self.s.send(bytes(f"bet {bet_amount}", "utf-8"))
+        self.s.send(bytes(f"bet {bet_amount}", 'utf-8'))
 
-    def mark_number(self):
-        position = self.bet_entry.get()
-        self.s.send(bytes(position, "utf-8"))
-
-    # def play(self):
-    #     self.s.send(bytes("play bingo", "utf-8"))
-
-    def update_board(self, board):
-        self.board_text.delete('1.0', tk.END)
-        self.board_text.insert(tk.END, board)
-
-    def update_number(self, number):
-        self.number_text.delete('1.0', tk.END)
-        self.number_text.insert(tk.END, number)
-
-    def update_cmd(self, cmd):
-        self.cmd_text.delete('1.0', tk.END)
-        self.cmd_text.insert(tk.END, cmd)
-
-    def send_bingo(self):
-        self.s.send(bytes("bingo", "utf-8"))
+    def create_back_button(self, parent):
+        back_button = tk.Button(
+            parent,
+            text="Back",
+            command=self.back,
+            bg="#375A7F",
+            font=("Candara", 13),
+            fg="#FFFFFF",
+            justify="center",
+            width=10
+        )
+        back_button.pack(pady=10)
 
     def back(self):
         self.s.send(bytes("back", 'utf-8'))
@@ -80,18 +172,17 @@ class BingoGamePage(tk.Frame):
         self.clear()
 
     def clear(self):
-        self.bet_entry.delete(0, tk.END)
-        self.board_text.delete('1.0', tk.END)
-        self.cmd_text.delete('1.0', tk.END)
+        self.messages_output.delete(0, tk.END)
+        self.bet_entry.set("")
 
     def handle_message(self, data):
         if data is not None:
             if data[0] == SendDataType.STRING:
                 msg = data[1].decode()
                 if msg[:16] == "Current number: ":
-                    self.update_number(int(msg[16:]))
+                    self.update_current_number(int(msg[16:]))
                 elif msg[:4] == "Your":
-                    self.update_board(msg[18:])
+                    board = [[sign for sign in row.split()] for row in msg[18:].split('\n') if row]
+                    self.update_bingo_numbers(board)
                 else:
-                    self.update_cmd(msg)
-
+                    self.show_message(msg)

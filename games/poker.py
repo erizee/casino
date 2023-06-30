@@ -6,58 +6,12 @@ from games.gameClass import Game, GameStatus
 from helpers import SendDataType
 import time
 from collections import Counter
-
-
-class Deck:
-    def __init__(self):
-        self.cards = []
-        self.fill_deck()
-        random.seed(time.time())
-
-    def fill_deck(self):
-        self.cards = []
-        for suit in ["♠", "♥", "♦", "♣"]:
-            for value in range(1, 14):
-                self.cards.append(Card(suit, value))
-        self.shuffle()
-
-    def shuffle(self):
-        random.shuffle(self.cards)
-
-    def draw(self):
-        if len(self.cards) < 1:
-            self.fill_deck()
-
-        return self.cards.pop()
-
-
-FIGURES = ["J", "Q", "K"]
-
-
-def value_to_figure(value):
-    if value == 1:
-        return "A"
-    elif value <= 10:
-        return str(value)
-    else:
-        return FIGURES[value - 11]
+from games.cardClass import Deck, CardPoker
 
 
 def suit_to_value(suit):
     values = {"♠": 4, "♥": 3, "♦": 2, "♣": 1}
     return values[suit]
-
-
-class Card:
-    def __init__(self, suit, val):
-        self.suit = suit
-        self.value = val
-
-    def __str__(self):
-        return f"{value_to_figure(self.value)}{self.suit}"
-
-    def __repr__(self):
-        return f"{value_to_figure(self.value)}{self.suit}"
 
 
 class GameState(Enum):
@@ -168,7 +122,7 @@ class Poker(Game):
     def __init__(self):
         super().__init__()
         self.bets = {}
-        self.deck = Deck()
+        self.deck = Deck(CardPoker, 6)
         self.state = None
         self.pot = 0
         self.hands = {}
@@ -180,6 +134,7 @@ class Poker(Game):
         self.players_list = []
         self.player_turn_idx = 0
         self.folded = []
+        self.discarded = {}
         self.betting_again = False
 
     def initial_cards(self):
@@ -190,9 +145,7 @@ class Poker(Game):
                 self.hands[player].cards.append(self.deck.draw())
         for player in self.players.keys():
             self.hands[player].cards.sort(key=lambda card: card.value)
-        self.message_queues[self.players_list[self.player_turn_idx]].put(
-            (bytes("Now it is your turn!\n", "utf-8"), SendDataType.STRING))
-        self.output.append(self.players_list[self.player_turn_idx])
+        self.send_str("Now it is your turn!\n", self.players_list[self.player_turn_idx])
 
     def start(self):
         self.status = GameStatus.UPDATE
@@ -200,25 +153,21 @@ class Poker(Game):
         random.shuffle(self.players_list)
         for key in self.players.keys():
             greeting_message = f"Welcome to the Five Card Draw Poker game!\nPlace initial bet {self.initial_bet}:\n"
-            self.message_queues[key].put((bytes(greeting_message, "utf-8"), SendDataType.STRING))
-            self.output.append(key)
+            self.send_str(greeting_message, key)
         self.state = GameState.INITIAL_BET
 
     def bet(self, player_key, bet_amount):
         if player_key not in self.bets.keys():
             self.bets[player_key] = 0
         if self.players[player_key].balance < bet_amount:
-            self.message_queues[player_key].put(
-                (bytes("You don't have enough money!\n", "utf-8"), SendDataType.STRING))
-            self.output.append(player_key)
+            self.send_str("You don't have enough money!\n", player_key)
             return False
         else:
             self.bets[player_key] += bet_amount
             self.players[player_key].balance -= bet_amount
             self.pot += bet_amount
-            self.message_queues[player_key].put(
-                (bytes(f"{bet_amount} bet placed, game starts!\n", "utf-8"), SendDataType.STRING))
-            self.output.append(player_key)
+            self.update_balance(player_key, -bet_amount)
+            self.send_str(f"{bet_amount} bet placed, game starts!\n", player_key)
             return True
 
     def next_player(self):
@@ -234,9 +183,7 @@ class Poker(Game):
             self.player_turn_idx = (self.player_turn_idx + 1) % (len(self.players_list))
             while self.players_list[self.player_turn_idx] in self.folded:
                 self.player_turn_idx = (self.player_turn_idx + 1) % (len(self.players_list))
-            self.message_queues[self.players_list[self.player_turn_idx]].put(
-                (bytes(f"Now it is your turn!\n", "utf-8"), SendDataType.STRING))
-            self.output.append(self.players_list[self.player_turn_idx])
+            self.send_str(f"Now it is your turn!\n", self.players_list[self.player_turn_idx])
             if self.player_turn_idx == 0 and not self.someone_raised:
                 if not self.betting_again:
                     self.state = GameState.DRAWING
@@ -256,31 +203,24 @@ class Poker(Game):
                         raise ValueError
                     self.bet(s, bet_amount)
                 except ValueError:
-                    self.message_queues[s].put((bytes("Invalid bet!\n", "utf-8"), SendDataType.STRING))
-                    self.output.append(s)
+                    self.send_str("Invalid bet!\n", s)
                 self.time_of_last_move = time.time()
 
             elif self.his_turn(s) and self.state == GameState.BETTING and response[
                                                                           :5] == "check" and not self.someone_raised:
                 self.next_player()
-                self.message_queues[s].put(
-                    (bytes(f"You checked!\n", "utf-8"), SendDataType.STRING))
-                self.output.append(s)
+                self.send_str(f"You checked!\n", s)
             elif self.his_turn(s) and self.state == GameState.BETTING and response[:4] == "fold":
                 self.raise_responded[s] = True
                 self.folded.append(s)
-                self.message_queues[s].put(
-                    (bytes(f"You folded!\n", "utf-8"), SendDataType.STRING))
-                self.output.append(s)
+                self.send_str(f"You folded!\n", s)
                 self.next_player()
             elif self.his_turn(s) and self.state == GameState.BETTING and response[
                                                                           :4] == "call" and self.someone_raised:
                 if self.bet(s, self.raise_amount):
                     self.raise_responded[s] = True
                     self.next_player()
-                    self.message_queues[s].put(
-                        (bytes(f"Successfully called {self.raise_amount}!\n", "utf-8"), SendDataType.STRING))
-                    self.output.append(s)
+                    self.send_str(f"Successfully called {self.raise_amount}!\n", s)
             elif self.his_turn(s) and self.state == GameState.BETTING and response[:5] == "raise":
                 try:
                     raise_amount = int(response[5:])
@@ -294,13 +234,11 @@ class Poker(Game):
                         self.raise_responded[s] = True
                         self.someone_raised = True
                         self.next_player()
-                        self.message_queues[s].put(
-                            (bytes(f"Successfully raised {raise_amount}!\n", "utf-8"), SendDataType.STRING))
-                        self.output.append(s)
-                except (ValueError, NotEnoughRaiseError) as e:
-                    self.message_queues[s].put((bytes("Invalid raise!\n", "utf-8"), SendDataType.STRING))
-                    self.output.append(s)
-            elif self.state == GameState.WAIT_FOR_DRAWS and response[:7] == "discard" and s not in self.folded:
+                        self.send_str(f"Successfully raised {raise_amount}!\n", s)
+                except (ValueError, NotEnoughRaiseError):
+                    self.send_str("Invalid raise!\n", s)
+            elif self.state == GameState.WAIT_FOR_DRAWS and response[:7] == "discard" and s not in self.folded and \
+                    s not in self.discarded:
                 try:
                     discard_idx = [int(i) for i in response[7:].split(',')]
                     if len(discard_idx) > 0 and (max(discard_idx) > 4 or min(discard_idx) < 0):
@@ -314,13 +252,11 @@ class Poker(Game):
                     new_deck.sort(key=lambda card: card.value)
                     self.hands[s].cards = new_deck
                     self.send_hand(s)
-                except (ValueError, IndexError) as e:
-                    self.message_queues[s].put(
-                        (bytes("Invalid card index to discard!\n", "utf-8"), SendDataType.STRING))
-                    self.output.append(s)
+                    self.discarded[s] = True
+                except (ValueError, IndexError):
+                    self.send_str("Invalid card index to discard!\n", s)
             else:
-                self.message_queues[s].put((bytes("Invalid command\n", "utf-8"), SendDataType.STRING))
-                self.output.append(s)
+                self.send_str("Invalid command\n", s)
             if self.state == GameState.BETTING and self.someone_raised:
                 if False not in self.raise_responded.values():
                     if not self.betting_again:
@@ -350,8 +286,7 @@ class Poker(Game):
         elif self.status != GameStatus.STOPPED and self.state == GameState.DRAWING:
             for key in self.players.keys():
                 message = f"Type comma separated indexes of cards to discard from 0 to 4\n"
-                self.message_queues[key].put((bytes(message, "utf-8"), SendDataType.STRING))
-                self.output.append(key)
+                self.send_str(message, key)
             self.time_of_last_move = time.time()
             self.state = GameState.WAIT_FOR_DRAWS
         elif self.status != GameStatus.STOPPED and self.state == GameState.WAIT_FOR_DRAWS and \
@@ -360,15 +295,12 @@ class Poker(Game):
             for key in self.players.keys():
                 if key not in self.folded:
                     message = f"Discarding cards ended, second bet round\n"
-                    self.message_queues[key].put((bytes(message, "utf-8"), SendDataType.STRING))
-                    self.output.append(key)
+                    self.send_str(message, key)
             self.player_turn_idx = 0
             self.betting_again = True
             self.raise_amount = 0
             self.someone_raised = False
-            self.message_queues[self.players_list[self.player_turn_idx]].put(
-                (bytes("Now it is your turn!\n", "utf-8"), SendDataType.STRING))
-            self.output.append(self.players_list[self.player_turn_idx])
+            self.send_str("Now it is your turn!\n", self.players_list[self.player_turn_idx])
         elif self.status != GameStatus.STOPPED and self.state == GameState.CHECK:
             winner = None
             for player_key in self.players.keys():
@@ -386,16 +318,17 @@ class Poker(Game):
 
     def handle_win(self, player_key):
         self.players[player_key].balance += self.pot
-        self.message_queues[player_key].put((bytes(f"You won!\n", "utf-8"), SendDataType.STRING))
-        self.output.append(player_key)
+        self.update_balance(player_key, self.pot)
+        self.add_game_history(player_key, "poker", 1, self.pot, 0)
+        self.send_str(f"You won!\n", player_key)
 
     def handle_lost(self, player_key):
-        self.message_queues[player_key].put((bytes(f"You lost!\n", "utf-8"), SendDataType.STRING))
-        self.output.append(player_key)
+        self.add_game_history(player_key, "poker", 0, 0, self.bets[player_key])
+        self.send_str(f"You lost!\n", player_key)
 
     def prepare_next_round(self):
         self.bets = {}
-        self.deck = Deck()
+        self.deck = Deck(CardPoker, 6)
         self.state = GameState.INITIAL_BET
         self.pot = 0
         self.hands = {}
@@ -405,5 +338,4 @@ class Poker(Game):
         self.player_turn_idx = 0
         self.folded = []
         self.betting_again = False
-        # TODO: to request play again, kick after 30 seconds
-        # TODO: quit/back handling (players_list change)
+        self.discarded = {}

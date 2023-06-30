@@ -1,10 +1,6 @@
 import random
 from enum import Enum
-from helpers import SendDataType
-from errorDefinitions import InvalidResponseException
-import socket
-from clientClass import Client
-import time
+from errorDefinitions import InvalidResponseException, InvalidBet
 from games.gameClass import Game, GameStatus
 from games.cardClass import Deck, CardBaccarat
 
@@ -17,6 +13,7 @@ class Outcome(Enum):
 
     def next(self):
         return Outcome((self.value + 1) % 3)
+
 
 class Baccarat(Game):
     MAX_PLAYERS = 1
@@ -36,150 +33,134 @@ class Baccarat(Game):
             if not split_response:
                 raise InvalidResponseException
 
-            betNr = self.betsParser(response)
+            bet_nr = self.bets_parser(response)
 
             sums = [0, 0]
-            if betNr == 1:
-                outcome = self.FirstRound(sums)
+            if bet_nr == 1:
+                outcome = self.first_round(sums)
 
                 if outcome.value >= 0:
-                    self.displayTable()
-                    self.handleWin(outcome)
+                    self.display_table()
+                    self.handle_win(outcome)
                 else:
-                    outcome = self.SecondRound(sums)
-                    self.displayTable()
-                    self.handleWin(outcome)
+                    outcome = self.second_round(sums)
+                    self.display_table()
+                    self.handle_win(outcome)
                 self.clear()
 
     def start(self):
         for key in self.players.keys():
             self.player = key
-        self.message_queues[self.player].put(
-            (b"Welcome to baccarat!!\n To see all available commands type 'commands'", SendDataType.STRING))
-        self.output.append(self.player)
+        self.send_str("Welcome to baccarat!!\n To see all available commands type 'commands'", self.player)
 
-    def handleWin(self, outcome: Outcome):
+    def handle_win(self, outcome: Outcome):
         if self.bets[outcome.name] == 0:
-            self.message_queues[self.player].put((bytes(
-                f"Outcome:-{self.bets[outcome.next().name] + self.bets[outcome.next().next().name]}", "utf-8"),
-                                                  SendDataType.STRING))
-            self.output.append(self.player)
-            self.add_game_history(self.player, "baccarat", 0, 0, self.bets[outcome.next().name] + self.bets[outcome.next().next().name])
+            self.send_str(f"Outcome:-{self.bets[outcome.next().name] + self.bets[outcome.next().next().name]}",
+                          self.player)
+            self.add_game_history(self.player, "baccarat", 0, 0,
+                                  self.bets[outcome.next().name] + self.bets[outcome.next().next().name])
         else:
             self.players[self.player].balance += self.bets[outcome.name] * 2
             self.update_balance(self.player, self.bets[outcome.name] * 2)
-            self.message_queues[self.player].put((bytes(f"Outcome:+{self.bets[outcome.name]}", "utf-8"), SendDataType.STRING))
-            self.output.append(self.player)
+            self.send_str(f"Outcome:+{self.bets[outcome.name]}", self.player)
             self.add_game_history(self.player, "baccarat", 1, self.bets[outcome.name], 0)
 
-    def FirstRound(self, sums):
+    def first_round(self, sums):
         self.table[0].append(self.cards.draw())
         self.table[1].append(self.cards.draw())
         self.table[0].append(self.cards.draw())
         self.table[1].append(self.cards.draw())
 
-        playerSum = (self.table[0][0].value + self.table[0][1].value) % 10
-        bankerSum = (self.table[1][0].value + self.table[1][1].value) % 10
+        player_sum = (self.table[0][0].value + self.table[0][1].value) % 10
+        banker_sum = (self.table[1][0].value + self.table[1][1].value) % 10
 
-        sums[0] = playerSum
-        sums[1] = bankerSum
+        sums[0] = player_sum
+        sums[1] = banker_sum
 
-        if playerSum == bankerSum and playerSum not in (8, 9):
-            self.message_queues[self.player].put((b"Its a Tie!", SendDataType.STRING))
-            self.output.append(self.player)
+        if player_sum == banker_sum and player_sum not in (8, 9):
+            self.send_str("Its a Tie!", self.player)
             return Outcome.tie
-        elif playerSum in (8, 9):
-            self.message_queues[self.player].put((b"Player wins!", SendDataType.STRING))
-            self.output.append(self.player)
+        elif player_sum in (8, 9):
+            self.send_str("Player wins!", self.player)
             return Outcome.player
-        elif bankerSum in (8, 9):
-            self.message_queues[self.player].put((b"Banker wins!", SendDataType.STRING))
-            self.output.append(self.player)
+        elif banker_sum in (8, 9):
+            self.send_str("Banker wins!", self.player)
             return Outcome.banker
         else:
             return Outcome.nobody
 
-    def SecondRound(self, sums):
-        isPlayerPat = 0
-        playerThirdCard = 0
-        bankerThirdCard = 0
+    def second_round(self, sums):
+        is_player_pat = 0
+        player_third_card = 0
+        banker_third_card = 0
 
-        playerTotal = sums[0]
-        bankerTotal = sums[1]
+        player_total = sums[0]
+        banker_total = sums[1]
 
-        if playerTotal <= 5:
-            isPlayerPat = 1
-            newCard = self.cards.draw()
-            self.table[0].append(newCard)
-            playerThirdCard = newCard.value
+        if player_total <= 5:
+            is_player_pat = 1
+            new_card = self.cards.draw()
+            self.table[0].append(new_card)
+            player_third_card = new_card.value
 
-        if isPlayerPat:
-            if bankerTotal <= 2 or (bankerTotal == 3 and playerThirdCard != 8) or (
-                    bankerTotal == 4 and 2 <= playerThirdCard <= 7) or \
-                    (bankerTotal == 5 and 4 <= playerThirdCard <= 7) or (
-                    bankerTotal == 6 and 6 <= playerThirdCard <= 7):
-                newCard = self.cards.draw()
-                self.table[0].append(newCard)
-                bankerThirdCard = newCard.value
+        if is_player_pat:
+            if banker_total <= 2 or (banker_total == 3 and player_third_card != 8) or (
+                    banker_total == 4 and 2 <= player_third_card <= 7) or \
+                    (banker_total == 5 and 4 <= player_third_card <= 7) or (
+                    banker_total == 6 and 6 <= player_third_card <= 7):
+                new_card = self.cards.draw()
+                self.table[0].append(new_card)
+                banker_third_card = new_card.value
 
-        playerTotal = (playerTotal + playerThirdCard) % 10
-        bankerTotal = (bankerTotal + bankerThirdCard) % 10
-        if playerTotal == bankerTotal:
-            self.message_queues[self.player].put((b"Its a Tie!", SendDataType.STRING))
-            self.output.append(self.player)
+        player_total = (player_total + player_third_card) % 10
+        banker_total = (banker_total + banker_third_card) % 10
+        if player_total == banker_total:
+            self.send_str("Its a Tie!", self.player)
             return Outcome.tie
         else:
-            if (abs(9 - playerTotal) < abs(9 - bankerTotal)):
-                self.message_queues[self.player].put((b"Player wins!", SendDataType.STRING))
-                self.output.append(self.player)
+            if abs(9 - player_total) < abs(9 - banker_total):
+                self.send_str("Player wins!", self.player)
                 return Outcome.player
             else:
-                self.message_queues[self.player].put((b"Banker wins!", SendDataType.STRING))
-                self.output.append(self.player)
+                self.send_str("Banker wins!", self.player)
                 return Outcome.banker
 
-    def displayTable(self):
-        playerCards = " ".join([str(card) for card in self.table[0]])
-        bankerCards = " ".join([str(card) for card in self.table[1]])
-        self.message_queues[self.player].put(
-            (bytes(f"""Player:     Banker:\n{playerCards}:{bankerCards}\n""", "utf-8"), SendDataType.STRING))
-        self.output.append(self.player)
+    def display_table(self):
+        player_cards = " ".join([str(card) for card in self.table[0]])
+        banker_cards = " ".join([str(card) for card in self.table[1]])
+        self.send_str(f"""Player:     Banker:\n{player_cards}:{banker_cards}\n""", self.player)
 
-    def betsParser(self, bet):
+    def bets_parser(self, bet):
         try:
-            betSplited = bet.split(" ")
-            if betSplited[0] == "commands":
-                self.message_queues[self.player].put((bytes("""Available commands:
+            bet_splited = bet.split(" ")
+            if bet_splited[0] == "commands":
+                self.send_str("""Available commands:
     -Betting:
         bet [tie|banker|player] <amount>
     -Quit
-        back""", "utf-8"), SendDataType.STRING))
-                self.output.append(self.player)
+        back""", self.player)
                 return 0
-            elif betSplited[0] == "bet":
-                if self.bets.get(betSplited[1]) is not None:
-                    amount = int(betSplited[2])
+            elif bet_splited[0] == "bet":
+                if self.bets.get(bet_splited[1]) is not None:
+                    amount = int(bet_splited[2])
 
                     if amount < 0:
-                        self.message_queues[self.player].put((bytes("Invalid bet", "utf-8"), SendDataType.STRING))
-                        self.output.append(self.player)
+                        self.send_str("Invalid bet", self.player)
                         return -1
                     if self.players[self.player].balance < amount:
-                        self.message_queues[self.player].put((bytes("Not enough money", "utf-8"), SendDataType.STRING))
-                        self.output.append(self.player)
+                        self.send_str("Not enough money", self.player)
                         return -1
-                    self.bets[betSplited[1]] = amount
+                    self.bets[bet_splited[1]] = amount
                     self.players[self.player].balance -= amount
                     self.update_balance(self.player, -amount)
                     return 1
-        except:
-            pass
-        self.message_queues[self.player].put((bytes("Invalid bet", "utf-8"), SendDataType.STRING))
-        self.output.append(self.player)
+            else:
+                raise InvalidBet()
+        except (IndexError, InvalidBet):
+            self.send_str("Invalid bet", self.player)
         return -1
 
     def clear(self):
         self.table = [[], []]
         for key in self.bets:
             self.bets[key] = 0
-

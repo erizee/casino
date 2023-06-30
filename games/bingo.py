@@ -1,8 +1,8 @@
 import random as rn
 from enum import Enum
 from games.gameClass import Game, GameStatus
-from helpers import SendDataType
 import time
+
 
 def check(board):
     for i in range(5):
@@ -53,13 +53,11 @@ class Bingo(Game):
 
     def create_boards(self):
         for client_key in self.players.keys():
-            # self.boards[client_key] = [rn.sample(range(15 * j + 1, 15 * (j + 1) + 1), 5) for j in range(5)]
-            self.boards[client_key] = [[1 for _ in range(5)] for _ in range(5)]
+            self.boards[client_key] = [rn.sample(range(15 * j + 1, 15 * (j + 1) + 1), 5) for j in range(5)]
             self.boards[client_key][2][2] = "*"
 
     def generate_numbers(self):
-        # self.numbers = [i for i in range(1, 76)]
-        self.numbers = [1 for i in range(1, 76)]
+        self.numbers = [i for i in range(1, 76)]
         rn.shuffle(self.numbers)
 
     def handle_response(self, response, s):
@@ -69,43 +67,33 @@ class Bingo(Game):
                 try:
                     bet_amount = int(response[3:])
                     if self.players[s].balance < bet_amount:
-                        self.message_queues[s].put(
-                            (bytes("You don't have enough money!\n", "utf-8"), SendDataType.STRING))
-                        self.output.append(s)
+                        self.send_str("You don't have enough money!\n", s)
                     else:
                         self.bets[s] = bet_amount
                         self.players[s].balance -= bet_amount
                         self.update_balance(s, -bet_amount)
                         self.pot += bet_amount
-                        self.message_queues[s].put(
-                            (bytes(f"{bet_amount} bet placed, wait for other players\n", "utf-8"), SendDataType.STRING))
-                        self.output.append(s)
+                        self.send_str(f"{bet_amount} bet placed, wait for other players\n", s)
                 except ValueError:
-                    self.message_queues[s].put((bytes("Invalid bet!\n", "utf-8"), SendDataType.STRING))
-                    self.output.append(s)
+                    self.send_str("Invalid bet!\n", s)
             elif response == "bingo" and self.winner is None:
                 if check(self.boards[s]):
                     self.handle_win(s)
                     self.winner = s
                 else:
-                    self.message_queues[s].put((bytes("You don't have bingo!\n", "utf-8"), SendDataType.STRING))
-                    self.output.append(s)
+                    self.send_str("You don't have bingo!\n", s)
             else:
                 try:
                     position = tuple(int(x) for x in response.split(", "))
                 except ValueError:
-                    self.message_queues[s].put((bytes("Invalid command\n", "utf-8"), SendDataType.STRING))
-                    self.output.append(s)
+                    self.send_str("Invalid command\n", s)
                 else:
                     try:
                         if len(position) == 2 and self.boards[s][position[0]][position[1]] == self.current_nb:
                             self.boards[s][position[0]][position[1]] = "*"
-                            self.message_queues[s].put((bytes(board_to_str(self.boards[s]), "utf-8"),
-                                                        SendDataType.STRING))
-                            self.output.append(s)
+                            self.send_str(board_to_str(self.boards[s]), s)
                     except IndexError:
-                        self.message_queues[s].put((bytes("Invalid move\n", "utf-8"), SendDataType.STRING))
-                        self.output.append(s)
+                        self.send_str("Invalid move\n", s)
 
     def handle_timer(self):
         if self.state == GameState.GAME_OVER:
@@ -116,41 +104,32 @@ class Bingo(Game):
             self.current_nb = self.numbers[self.current_nb_idx]
             self.current_nb_idx += 1
             for client_key in self.players.keys():
-                message = board_to_str(self.boards[client_key])
-                message += f"Current number: {self.current_nb}\n"
-                self.message_queues[client_key].put((bytes(message, "utf-8"), SendDataType.STRING))
-                self.output.append(client_key)
+                self.send_str(board_to_str(self.boards[client_key]), client_key)
+                self.send_str(f"Current number: {self.current_nb}\n", client_key)
             self.last_update = time.time()
             self.initialized = True
         elif self.initialized and self.status != GameStatus.STOPPED and time.time() - self.last_update >= self.max_time:
             if self.current_nb_idx > 69:
                 for client_key in self.players.keys():
-                    self.message_queues[client_key].put((bytes("Game over!", "utf-8"), SendDataType.STRING))
-                    self.output.append(client_key)
+                    self.send_str("Game over!\n", client_key)
                 self.reset()
             else:
                 self.current_nb = self.numbers[self.current_nb_idx]
                 self.current_nb_idx += 1
                 for client_key in self.players.keys():
-                    self.current_nb = self.numbers[self.current_nb_idx]
-                    self.current_nb_idx += 1
-                    message = f"Current number: {self.current_nb}\n"
-                    self.message_queues[client_key].put((bytes(message, "utf-8"), SendDataType.STRING))
-                    self.output.append(client_key)
+                    self.send_str(f"Current number: {self.current_nb}\n", client_key)
                 self.last_update = time.time()
 
     def handle_win(self, s):
         self.players[s].balance += self.pot
-        self.message_queues[s].put((bytes(f"You won {self.pot}!", "utf-8"), SendDataType.STRING))
-        self.output.append(s)
+        self.send_str(f"You won {self.pot}!", s)
         self.update_balance(s, self.pot)
         self.add_game_history(s, "bingo", 1, self.pot, 0)
         self.end_game()
 
     def end_game(self):
         for client_key in self.players.keys():
-            self.message_queues[client_key].put((bytes("Game over!", "utf-8"), SendDataType.STRING))
-            self.output.append(client_key)
+            self.send_str("Game over!\n", client_key)
             if client_key != self.winner:
                 self.add_game_history(client_key, "bingo", 0, 0, self.bets[client_key])
         self.state = GameState.GAME_OVER
@@ -171,8 +150,6 @@ class Bingo(Game):
 
     def start(self):
         self.status = GameStatus.UPDATE
-
-        greeting_message = f"Welcome to the Bingo game!\nPlace your bet:\n"
+        greeting_message = "Welcome to the Bingo game!\n Place your bet:\n"
         for client_key in self.players.keys():
-            self.message_queues[client_key].put((bytes(greeting_message, "utf-8"), SendDataType.STRING))
-            self.output.append(client_key)
+            self.send_str(greeting_message, client_key)

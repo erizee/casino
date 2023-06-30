@@ -1,7 +1,5 @@
 import tkinter as tk
-import socket
-from helpers import SendDataType, receive_data
-from _thread import *
+from helpers import SendDataType
 
 
 class PokerGamePage(tk.Frame):
@@ -13,44 +11,41 @@ class PokerGamePage(tk.Frame):
         self.controller = controller
         self.s = self.controller.s
 
-        # self.back_btn = tk.Button(self, text="Back", command=self.back)
-
-        self.label = tk.Label(self, text="Welcome to the Bingo game!")
-        self.label = tk.Label(self, text="Welcome to the Bingo game!")
+        self.label = tk.Label(self, text="Welcome to the Poker game!")
         self.label.pack()
 
         self.bet_entry = tk.Entry(self)
         self.bet_entry.pack()
 
-        # self.play_button = tk.Button(self, text="Play", command=self.play)
-        # self.play_button.pack()
+        self.bet_button = tk.Button(self, text="Bet", command=self.place_bet)
+        self.bet_button.pack(pady=5)
 
-        self.bet_button = tk.Button(self, text="Place Bet", command=self.place_bet)
-        self.bet_button.pack()
+        self.buttons_frame = tk.Frame(self)
+        self.buttons_frame.pack()
 
-        self.raise_button = tk.Button(self, text="Raise", command=self.place_raise)
-        self.raise_button.pack()
+        self.fold_button = tk.Button(self.buttons_frame, text="Fold", command=self.send_fold)
+        self.fold_button.pack(side="left", padx=5)
 
-        self.call_button = tk.Button(self, text="Call", command=self.send_call)
-        self.call_button.pack()
+        self.call_button = tk.Button(self.buttons_frame, text="Call", command=self.send_call)
+        self.call_button.pack(side="left", padx=5)
 
-        self.fold_button = tk.Button(self, text="Fold", command=self.send_fold)
-        self.fold_button.pack()
+        self.raise_button = tk.Button(self.buttons_frame, text="Raise", command=self.place_raise)
+        self.raise_button.pack(side="left", padx=5)
 
-        self.check_button = tk.Button(self, text="Check", command=self.send_check)
-        self.check_button.pack()
+        self.check_button = tk.Button(self.buttons_frame, text="Check", command=self.send_check)
+        self.check_button.pack(side="left", padx=5)
 
         self.discard_button = tk.Button(self, text="Discard", command=self.send_discard)
-        self.discard_button.pack()
-
-        self.back_button = tk.Button(self, text="Go back", command=self.back)
-        self.back_button.pack()
+        self.discard_button.pack(pady=5)
 
         self.hand_text = tk.Text(self, width=30, height=10)
-        self.hand_text.pack()
+        self.hand_text.pack(pady=5)
 
         self.cmd_text = tk.Text(self, width=30, height=10)
-        self.cmd_text.pack()
+        self.cmd_text.pack(pady=5)
+
+        self.back_button = tk.Button(self, text="Go back", command=self.back)
+        self.back_button.pack(pady=5)
 
     def place_bet(self):
         bet_amount = self.bet_entry.get()
@@ -62,10 +57,8 @@ class PokerGamePage(tk.Frame):
 
     def send_discard(self):
         cards_to_discard = self.bet_entry.get()
-        self.s.send(bytes(f"discard{cards_to_discard}", "utf-8"))
-
-    # def play(self):
-    #     self.s.send(bytes("play bingo", "utf-8"))
+        print(cards_to_discard)
+        self.s.send(bytes("discard"+cards_to_discard, "utf-8"))
 
     def update_hand(self, hand):
         self.hand_text.delete('1.0', tk.END)
@@ -102,4 +95,3 @@ class PokerGamePage(tk.Frame):
                     self.update_hand(msg[6:])
                 else:
                     self.update_cmd(msg)
-

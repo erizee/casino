@@ -7,6 +7,8 @@ class StatPage(ttk.Frame):
     def __init__(self, parent, controller, width, height):
         ttk.Frame.__init__(self, parent, width=width, height=height)
         self.controller = controller
+        self.total = 100
+        self.total_str = tk.StringVar()
 
         self.fn = ('Candara', 13)
 
@@ -19,24 +21,24 @@ class StatPage(ttk.Frame):
 
         # Create table headers
         for col, header in enumerate(headers):
-            label = ttk.Label(self.frame, text=header, anchor=tk.CENTER, width=20)
+            label = ttk.Label(self.frame, text=header, anchor=tk.CENTER, width=20,font=self.fn)
             label.grid(row=0, column=col, sticky="nsew")
 
         # Create table rows
         for row, game in enumerate(games):
-            label_game = ttk.Label(self.frame, text=game, anchor=tk.CENTER, width=20)
+            label_game = ttk.Label(self.frame, text=game, anchor=tk.CENTER, width=20,font=self.fn)
             label_game.grid(row=row + 1, column=0, sticky="nsew")
 
-            label_lost = ttk.Label(self.frame, text="0", anchor=tk.CENTER, width=20)
+            label_lost = ttk.Label(self.frame, text="0", anchor=tk.CENTER, width=20,font=self.fn)
             label_lost.grid(row=row + 1, column=1, sticky="nsew")
 
-            label_won = ttk.Label(self.frame, text="0", anchor=tk.CENTER, width=20)
+            label_won = ttk.Label(self.frame, text="0", anchor=tk.CENTER, width=20,font=self.fn)
             label_won.grid(row=row + 1, column=2, sticky="nsew")
 
-            label_sum_won = ttk.Label(self.frame, text="0", anchor=tk.CENTER, width=20)
+            label_sum_won = ttk.Label(self.frame, text="0", anchor=tk.CENTER, width=20,font=self.fn)
             label_sum_won.grid(row=row + 1, column=3, sticky="nsew")
 
-            label_sum_lost = ttk.Label(self.frame, text="0", anchor=tk.CENTER, width=20)
+            label_sum_lost = ttk.Label(self.frame, text="0", anchor=tk.CENTER, width=20,font=self.fn)
             label_sum_lost.grid(row=row + 1, column=4, sticky="nsew")
 
             self.table_objects[game] = {
@@ -49,6 +51,8 @@ class StatPage(ttk.Frame):
         button = ttk.Button(self, text="Back", command=self.back)
         button.pack(anchor="nw", padx=10, pady=10)
 
+        label_total = ttk.Label(self, text="Total: ", anchor=tk.CENTER, width=20, textvariable=self.total_str,font=self.fn)
+        label_total.pack(anchor="s")
     def show_error_message(self, message):
         error = ttk.Label(text=message, bootstyle="danger", font=self.fn)
         error.place(relx=0.5, rely=0.2, anchor='n')
@@ -67,8 +71,11 @@ class StatPage(ttk.Frame):
                         gui_object['label_won']['text'] = str(stat[2])
                         gui_object['label_sum_won']['text'] = str(stat[3])
                         gui_object['label_sum_lost']['text'] = str(stat[4])
+                        self.total = self.total + stat[3] - stat[4]
+                        self.total_str.set("Balance: " +str(self.total))
         except Exception as e:
             print(e)
 
     def back(self):
+        self.total = 100
         self.controller.show_frame("ChooseGamePage")

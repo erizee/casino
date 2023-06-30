@@ -1,10 +1,16 @@
 import random
-
 from games.gameClass import Game, GameStatus
-from helpers import SendDataType
 import time
 from errorDefinitions import InvalidBet
-from _thread import *
+
+
+def get_field_color_from_number(rolled_number):
+    if rolled_number % 2 == 1:
+        return 'black'
+    elif rolled_number != 0:
+        return 'red'
+    else:
+        return 'green'
 
 
 class Roulette(Game):
@@ -14,8 +20,8 @@ class Roulette(Game):
     def __init__(self):
         super().__init__()
         self.bets = dict()
-        self.isBetTime = 0
-        self.state = 0
+        self.is_bet_time = 0
+        self.state = 1
         random.seed(time.time())
 
     def roll(self):
@@ -25,15 +31,13 @@ class Roulette(Game):
         super(Roulette, self).handle_response(response, s)
         if self.status != GameStatus.STOPPED:
             if response == "commands":
-                self.message_queues[s].put((bytes("""Available commands:
+                self.send_str("""Available commands:
     -Betting:
         bet [red|black] <amount>
     -Quit
-        back""", "utf-8"), SendDataType.STRING))
-                self.output.append(s)
-            elif not self.isBetTime:
-                self.message_queues[s].put((b"Cant place bets now, wait", SendDataType.STRING))
-                self.output.append(s)
+        back""", s)
+            elif not self.is_bet_time:
+                self.send_str("Cant place bets now, wait", s)
             else:
                 try:
                     info = response.split(" ")
@@ -49,11 +53,9 @@ class Roulette(Game):
                     self.update_balance(s, -amount)
                     self.bets[s][info[1]] += amount
 
-                    self.message_queues[s].put((b"Bet placed", SendDataType.STRING))
-                    self.output.append(s)
-                except Exception as e:
-                    self.message_queues[s].put((b"Invalid bet", SendDataType.STRING))
-                    self.output.append(s)
+                    self.send_str("Bet placed", s)
+                except (IndexError, InvalidBet):
+                    self.send_str("Invalid bet", s)
 
     def calculate_winning(self, p_dict, rolled):
         if rolled % 2 == 0:
@@ -69,11 +71,10 @@ class Roulette(Game):
     def handle_timer(self):
         if self.state == 0:
             if time.time() - self.time_of_last_move >= 10:
-                self.isBetTime = 0
+                self.is_bet_time = 0
 
                 for client_key in self.players.keys():
-                    self.output.append(client_key)
-                    self.message_queues[client_key].put((b"Rolling...", SendDataType.STRING))
+                    self.send_str("Rolling...", client_key)
                 self.state = 1
                 self.status = GameStatus.UPDATE
                 self.time_of_last_move = time.time()
@@ -81,10 +82,9 @@ class Roulette(Game):
             if time.time() - self.time_of_last_move >= 0.7:
                 rolled = self.roll()
                 for client_key in self.players.keys():
-                    self.output.append(client_key)
-                    self.message_queues[client_key].put((bytes(
-                        f"Number rolled: {rolled} - {'black' if rolled % 2 == 1 else ('red' if rolled != 0 else 'green')}",
-                        "utf-8"), SendDataType.STRING))
+                    self.send_str(
+                        f"Number rolled: {rolled} - {get_field_color_from_number(rolled)}",
+                        client_key)
 
                 for client_key in self.players.keys():
                     if self.bets.get(client_key) is not None:
@@ -112,10 +112,7 @@ class Roulette(Game):
                             self.add_game_history(client_key, "roulette", won, winning, loss)
                         except Exception as e:
                             print(e)
-
-                        self.output.append(client_key)
-                        self.message_queues[client_key].put(
-                            (bytes(message, "utf-8"), SendDataType.STRING))
+                        self.send_str(message, client_key)
 
                 self.bets.clear()
                 self.state = 2
@@ -124,10 +121,8 @@ class Roulette(Game):
         elif self.state == 2:
             if time.time() - self.time_of_last_move >= 4:
                 for client_key in self.players.keys():
-                    self.output.append(client_key)
-                    self.message_queues[client_key].put((b"Its betting time", SendDataType.STRING))
-
-                self.isBetTime = 1
+                    self.send_str("Its betting time", client_key)
+                self.is_bet_time = 1
                 self.state = 0
                 self.status = GameStatus.UPDATE
                 self.time_of_last_move = time.time()
